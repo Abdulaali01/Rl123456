@@ -168,6 +168,8 @@ body.lock{overflow:hidden}
 .kinds label:has(input:checked){border-color:var(--navy);background:var(--bg)}
 .kinds input{width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--navy)}
 .kinds span{display:grid;gap:2px}.kinds b{font:800 .95rem var(--display)}.kinds small{color:var(--muted);font-size:.8rem}
+.fbox.ro{border-style:solid;background:rgba(255,243,176,.92);box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.fbox.ro .fbar{cursor:default}
 </style></head><body>
 <script id="cfg">
 /* ===================== الإعدادات — عدّل هنا فقط ===================== */
@@ -181,7 +183,7 @@ var FB_KEY = "AIzaSyCj_IStSKuqHpVCbSFk6cpElCRxkFBUeeg";  // Web API key من Fir
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <noscript><p style="padding:24px;text-align:center">افتح رابط النموذج في Safari أو Chrome. معاينة المرفقات لا تشغّل نموذج التعبئة.</p></noscript>
 <script id="app">
-const VER="v12.1";
+const VER="v12.4";
 const SRC={cfg:document.getElementById("cfg").textContent,app:document.getElementById("app").textContent,css:document.getElementById("css").textContent};
 const LINK_ID=new URL(location.href).searchParams.get("report");
 let EMB=(typeof EMBED!=="undefined")?EMBED:(LINK_ID?{fid:LINK_ID,linkMode:true}:null);
@@ -513,7 +515,7 @@ function build(){const list=$("#list");list.innerHTML="";
   IDS.forEach((id,i)=>{const nt=el("div",{className:"pnote",id:"note_"+i});list.append(nt);
     const s=el("section",{className:"sheet"});const im=el("img",{src:PAGES[i],alt:"صفحة "+(i+1)});im.onload=()=>{if(im.naturalWidth)s.style.aspectRatio=im.naturalWidth+"/"+im.naturalHeight};
     s.append(im,el("span",{className:"tag",textContent:`${i+1} / ${IDS.length}`}));
-    const add=el("button",{type:"button",className:"addtxt",textContent:"➕ إضافة نص"});add.setAttribute("aria-label","إضافة نص في الصفحة "+(i+1));
+    const add=el("button",{type:"button",className:"addtxt",textContent:"📝 إضافة ملاحظة",hidden:!!EMB});add.setAttribute("aria-label","إضافة ملاحظة في الصفحة "+(i+1));
     add.onclick=()=>{const R=s.getBoundingClientRect(),hh=Math.min(40,R.width*.16/R.height*100);const f={x:30,y:Math.max(0,45-hh/2),w:40,h:+hh.toFixed(2),t:""};state[id].free.push(f);const bx=freeBox(s,id,f);s.append(bx);store();bx.querySelector("textarea").focus()};
     s.append(add);(state[id].free||[]).forEach(f=>s.append(freeBox(s,id,f)));
     if(isReport()){
@@ -534,12 +536,12 @@ function build(){const list=$("#list");list.innerHTML="";
   renderPicker()}
 
 /* ---- نص حر: يُضاف في أي مكان، يُسحب من شريطه ويُكبّر من الدائرة ---- */
-function freeBox(sheet,id,f){const box=el("div",{className:"fbox"});const pos=()=>Object.assign(box.style,{left:f.x+"%",top:f.y+"%",width:f.w+"%",height:f.h+"%"});pos();
-  const bar=el("div",{className:"fbar"},'<span>⠿ اسحب</span>');const del=el("button",{type:"button",className:"fdel",textContent:"✕"});del.setAttribute("aria-label","حذف النص");bar.append(del);
-  const ta=el("textarea",{value:f.t||"",placeholder:"اكتب هنا"});ta.dir="auto";ta.setAttribute("aria-label","نص مضاف");ta.oninput=()=>{f.t=ta.value;store()};
+function freeBox(sheet,id,f){const ro=!!EMB;const box=el("div",{className:"fbox"+(ro?" ro":"")});const pos=()=>Object.assign(box.style,{left:f.x+"%",top:f.y+"%",width:f.w+"%",height:f.h+"%"});pos();
+  const bar=el("div",{className:"fbar"},ro?'<span>📝 ملاحظة</span>':'<span>⠿ ملاحظة · اسحب</span>');const del=el("button",{type:"button",className:"fdel",textContent:"✕"});del.setAttribute("aria-label","حذف الملاحظة");del.title="حذف الملاحظة";bar.append(del);
+  const ta=el("textarea",{value:f.t||"",placeholder:"اكتب الملاحظة هنا",readOnly:ro});ta.dir="auto";ta.setAttribute("aria-label","ملاحظة");ta.oninput=()=>{f.t=ta.value;store()};
   const rz=el("span",{className:"frz",title:"تكبير/تصغير"});box.append(bar,ta,rz);
   del.onclick=()=>{const a=state[id].free,i=a.indexOf(f);if(i>=0)a.splice(i,1);box.remove();store()};
-  const drag=(e,mode)=>{if(e.target===del||ta.readOnly)return;e.preventDefault();const r=sheet.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,o={...f};
+  const drag=(e,mode)=>{if(e.target===del||(ro&&mode==="m"))return;e.preventDefault();const r=sheet.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,o={...f};
     const mv=ev=>{const dx=(ev.clientX-sx)/r.width*100,dy=(ev.clientY-sy)/r.height*100;
       if(mode==="m"){f.x=Math.min(100-f.w,Math.max(0,o.x+dx));f.y=Math.min(100-f.h,Math.max(0,o.y+dy))}
       else{f.w=Math.min(100-f.x,Math.max(10,o.w+dx));f.h=Math.min(100-f.y,Math.max(r.width*.08/r.height*100,o.h+dy))}pos()};
@@ -577,7 +579,7 @@ $("#pkNone").onclick=()=>{SEL.clear();$("#pkList").querySelectorAll("input[type=
 $("#pkLink").onclick=()=>{if(!SEL.size){toast("اختر صفحة واحدة على الأقل من القائمة");return}$("#btnLink").click()};
 
 /* Wipes old writing: clears the boxes in the page image itself and empties the fields */
-async function wipePage(i){if(!isReport()){state[IDS[i]].free=[];store();return}const id=IDS[i],im=await loadImg(PAGES[i]);const c=el("canvas");c.width=im.width;c.height=im.height;
+async function wipePage(i){if(!isReport()){if(!EMB){state[IDS[i]].free=[];store()}return}const id=IDS[i],im=await loadImg(PAGES[i]);const c=el("canvas");c.width=im.width;c.height=im.height;
   const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,0,0);cleanBoxes(ctx,c.width,c.height);PAGES[i]=c.toDataURL("image/jpeg",.8);
   state[id].ifada="";state[id].coords="";const sh=$("#list").querySelectorAll(".sheet")[i];if(sh){sh.querySelector("img").src=PAGES[i];for(const k of ["ifada","coords"]){const t=sh.querySelector("#"+k+"_"+i);if(t)t.value=""}}
   store()}
@@ -710,7 +712,6 @@ function mergeReply(f,reply,manual){
   let n=0;
   for(const id of Object.keys(data)){const v=data[id];if(!state[id]||!v||typeof v!=="object")continue;
     for(const k of ["ifada","coords"])if(typeof v[k]==="string")state[id][k]=v[k];
-    if(Array.isArray(v.free))state[id].free=v.free.filter(okBox);
     for(const k of ["before","after"])if(typeof v[k]==="string"&&v[k].startsWith("data:image/"))state[id][k]=v[k];
     n++}
   if(!n){if(manual)toast("صفحات هذا الرد غير موجودة في الملف المفتوح");return false}
@@ -1032,7 +1033,7 @@ async function sendSubmission(pdf,confirmed=false){
   let prev=null;try{prev=await requestJSON("submissions/"+EMB.fid+"/sentAt")}catch(_){}
   const key=new URLSearchParams(location.hash.slice(1)).get("k");
   // data: نص وصور كل صفحة ليُدمجها المرسل في ملفه الكامل
-  const data=Object.fromEntries(IDS.map(id=>[id,{ifada:state[id].ifada||"",coords:state[id].coords||"",before:state[id].before||"",after:state[id].after||"",free:state[id].free||[]}]));
+  const data=Object.fromEntries(IDS.map(id=>[id,{ifada:state[id].ifada||"",coords:state[id].coords||"",before:state[id].before||"",after:state[id].after||""}]));
   const sealed=await sealSubmission({kind:"recipient_submission",fid:EMB.fid,name:pdfName(),pdf:bytes64(new Uint8Array(await pdf.arrayBuffer())),data},key);
   try{
     await requestJSON("submissions/"+EMB.fid,"PUT",{...sealed,token:EMB.returnToken,status:"received",sentAt:{".sv":"timestamp"}});
@@ -1047,8 +1048,8 @@ async function sendSubmission(pdf,confirmed=false){
   const resent=HAS_SENT;SUBMISSION_SENT=true;HAS_SENT=true;await saveDraft();toast(resent?"تم إرسال التعديل للمرسل بنجاح":"تم إرسال الملف المعدّل للمرسل بنجاح");
 }
 function setEditable(on){
-  document.querySelectorAll(".sheet textarea").forEach(e=>e.readOnly=!on);
-  document.querySelectorAll(".sheet .pick,.sheet .wipe,.sheet .addtxt,.sheet .fdel,#btnWipeAll").forEach(e=>{e.disabled=!on;e.hidden=!on});
+  document.querySelectorAll(".sheet > textarea").forEach(e=>e.readOnly=!on);
+  document.querySelectorAll(".sheet .pick,.sheet .wipe,#btnWipeAll").forEach(e=>{e.disabled=!on;e.hidden=!on});
 }
 function lockSubmissionUI(){
   if(!SUBMISSION_SENT||!canReturn())return;
