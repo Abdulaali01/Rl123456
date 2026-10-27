@@ -161,6 +161,13 @@ body.lock{overflow:hidden}
 .fdel{min-height:0!important;height:100%;padding:0 8px;background:transparent;font-size:max(13px,2.4cqw)}
 .sheet .fbox textarea{position:static;flex:1;min-height:0;width:100%;height:auto;max-width:none;resize:none;border:0;border-radius:0;background:transparent;color:#111;font:700 3cqw/1.35 var(--display);padding:.6cqw 1cqw}
 .frz{position:absolute;right:-8px;bottom:-8px;width:max(20px,3.6cqw);height:max(20px,3.6cqw);background:var(--rust);border:2px solid #fff;border-radius:50%;cursor:nwse-resize;touch-action:none;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+
+.kinds{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin:0;display:grid;gap:8px}
+.kinds legend{font:800 .9rem var(--display);padding:0 6px}
+.kinds label{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1.5px solid var(--line);border-radius:10px;cursor:pointer}
+.kinds label:has(input:checked){border-color:var(--navy);background:var(--bg)}
+.kinds input{width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--navy)}
+.kinds span{display:grid;gap:2px}.kinds b{font:800 .95rem var(--display)}.kinds small{color:var(--muted);font-size:.8rem}
 </style></head><body>
 <script id="cfg">
 /* ===================== الإعدادات — عدّل هنا فقط ===================== */
@@ -174,7 +181,7 @@ var FB_KEY = "AIzaSyCj_IStSKuqHpVCbSFk6cpElCRxkFBUeeg";  // Web API key من Fir
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <noscript><p style="padding:24px;text-align:center">افتح رابط النموذج في Safari أو Chrome. معاينة المرفقات لا تشغّل نموذج التعبئة.</p></noscript>
 <script id="app">
-const VER="v12.0";
+const VER="v12.1";
 const SRC={cfg:document.getElementById("cfg").textContent,app:document.getElementById("app").textContent,css:document.getElementById("css").textContent};
 const LINK_ID=new URL(location.href).searchParams.get("report");
 let EMB=(typeof EMBED!=="undefined")?EMBED:(LINK_ID?{fid:LINK_ID,linkMode:true}:null);
@@ -275,7 +282,7 @@ const normName=n=>String(n).normalize("NFC").trim().replace(/\s+/g," ").toLocale
 function renderLib(){const sel=$("#libSel");if(!sel)return;sel.innerHTML="";
   if(!LIB.length){sel.append(el("option",{value:"",textContent:"لا توجد ملفات بعد — أرفق ملفاً"}));sel.disabled=true}
   else{sel.disabled=false;LIB.forEach(x=>{const o=el("option",{value:x.id,textContent:`${x.name} · ${x.count} صفحة`+(x.kind==="plain"?" · ملف عام":"")});o.selected=x.id===CUR;sel.append(o)})}
-  $("#btnRename").hidden=!CUR}
+  $("#btnRename").hidden=!CUR;$("#btnKind").hidden=!CUR||!IDS.length;$("#btnKind").textContent=isReport()?"🔁 تحويل لملف عام":"🔁 تحويل لتصميم البلاغات"}
 function applyDraft(d){KIND=d.kind||"report";docName=d.name||docName;load(d.pages,d.ids);
   IDS.forEach(id=>{const old=d.state[id];if(!old)return;for(const k of ["ifada","coords","before","after","note"])if(typeof old[k]==="string")state[id][k]=old[k];if(Array.isArray(old.free))state[id].free=old.free});
   build()}
@@ -285,7 +292,9 @@ function suggestNames(fname,kind,ids){const base=String(fname).replace(/\.pdf$/i
   const date=new Date().toLocaleDateString("ar-SA-u-ca-gregory",{day:"numeric",month:"long",year:"numeric"});const inc=ids.filter(x=>/^INC-/.test(x));
   const out=[base];if(kind==="report"){if(inc.length)out.push("بلاغات "+inc[0]+(inc.length>1?" إلى "+inc[inc.length-1]:""));out.push("بلاغات "+date)}else out.push(base+" — "+date);
   return [...new Set(out)].map(n=>{let x=n,k=2;while(LIB.some(l=>normName(l.name)===normName(x)))x=n+" ("+(k++)+")";return x})}
-function askName(sugs,info,except){return new Promise(res=>{const D=$("#nameDlg"),inp=$("#nameIn"),ch=$("#nameChips"),er=$("#nameErr");
+let DLG_KIND="report";
+function askName(sugs,info,except,kind){return new Promise(res=>{const D=$("#nameDlg"),inp=$("#nameIn"),ch=$("#nameChips"),er=$("#nameErr");
+  $("#kindBox").hidden=!kind;if(kind){DLG_KIND=kind;document.querySelectorAll("#kindBox input").forEach(r=>{r.checked=r.value===kind;r.onchange=()=>{if(r.checked)DLG_KIND=r.value}})}
   $("#nameInfo").textContent=info||"";inp.value=sugs[0]||"";er.textContent="";ch.innerHTML="";
   sugs.forEach(n=>{const b=el("button",{type:"button",textContent:n});b.onclick=()=>{inp.value=n;inp.focus()};ch.append(b)});ch.hidden=sugs.length<2;
   D.hidden=false;setTimeout(()=>{inp.focus();inp.select()},60);
@@ -310,6 +319,9 @@ document.body.innerHTML=`
 <div class="brand"><span class="logo" aria-hidden="true">📂</span><h2>تسمية الملف</h2><p id="nameInfo"></p></div>
 <label class="fld">اسم الملف<input id="nameIn" autocomplete="off"></label>
 <div class="chips" id="nameChips" aria-label="أسماء مقترحة"></div>
+<fieldset class="kinds" id="kindBox"><legend>نوع الملف</legend>
+<label><input type="radio" name="kind" value="report"><span><b>📋 تصميم البلاغات</b><small>مربعات الإفادة والإحداثيات وصور قبل/بعد للتعديل</small></span></label>
+<label><input type="radio" name="kind" value="plain"><span><b>📄 ملف عام</b><small>يظهر كما هو وتضيف عليه نصوصاً في أي مكان</small></span></label></fieldset>
 <div class="err" id="nameErr" role="alert"></div>
 <button type="submit" class="b-link big">💾 حفظ وفتح</button><button type="button" class="b-wipe big" id="nameCancel">إلغاء</button></form></div>
 <header class="bar" hidden id="bar"><div class="in"><button type="button" id="menuBtn" class="menu" aria-label="القائمة" aria-expanded="false" aria-controls="side">☰</button><span class="logo sm" aria-hidden="true">📋</span><h1 id="ttl">تعبئة البلاغات</h1><span class="who" id="who"></span></div></header>
@@ -332,7 +344,7 @@ document.body.innerHTML=`
 </aside>
 <main class="wrap" hidden id="main">
 <div class="libbar" id="libGrp"><label for="libSel">📂 ملفاتي</label><select id="libSel"></select>
-<button class="b-link" id="btnRename" type="button" hidden>✏️ تسمية</button><button class="b-send" id="btnNew" type="button">➕ ملف جديد</button></div>
+<button class="b-link" id="btnRename" type="button" hidden>✏️ تسمية</button><button class="b-link" id="btnKind" type="button" hidden>🔁 نوع الملف</button><button class="b-send" id="btnNew" type="button">➕ ملف جديد</button></div>
 <div class="statusbox"><div class="status" id="status"></div><div class="done" id="done" hidden></div></div>
 <section class="linkcard" id="linkCard" hidden><h2>🔗 الربط والتمديد</h2>
 <p class="hint" id="linkHint">أرفق ملف PDF من القائمة الجانبية لإنشاء رابط للمستلم.</p>
@@ -358,6 +370,13 @@ $("#side").addEventListener("click",e=>{if(e.target.closest(".acts button")&&isN
 
 $("#libSel").onchange=e=>switchFile(e.target.value);
 $("#btnNew").onclick=()=>$("#pdfIn").click();
+$("#btnKind").onclick=async()=>{if(!IDS.length)return;const toRep=!isReport();
+  if(!confirm(toRep?"تحويل «"+docName+"» إلى تصميم البلاغات؟ تظهر مربعات الإفادة والإحداثيات وصور قبل/بعد على كل صفحة، ويُمسح ما تحت مربعي الإفادة والإحداثيات.":"تحويل «"+docName+"» إلى ملف عام؟ تختفي مربعات الإفادة والإحداثيات والصور، وتبقى النصوص المضافة."))return;
+  const b=$("#btnKind");b.disabled=true;
+  try{if(toRep)for(let i=0;i<PAGES.length;i++){b.textContent=`جارٍ التحويل ${i+1}/${PAGES.length}…`;const im=await loadImg(PAGES[i]);const c=el("canvas");c.width=im.width;c.height=im.height;
+      const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,0,0);cleanBoxes(ctx,c.width,c.height);PAGES[i]=c.toDataURL("image/jpeg",.8)}
+    KIND=toRep?"report":"plain";$("#ttl").textContent=`${docName} · ${IDS.length} `+(isReport()?"بلاغ":"صفحة");build();store();await saveDraft();toast(toRep?"تم التحويل لتصميم البلاغات — المربعات جاهزة للتعديل":"تم التحويل لملف عام")}
+  catch(e){console.warn(e);toast("تعذّر التحويل")}finally{b.disabled=false;renderLib()}};
 $("#btnRename").onclick=async()=>{if(!CUR)return;const old=docName,v=await askName([docName],"غيّر اسم الملف المفتوح",CUR);if(!v||v===old)return;
   docName=v;$("#ttl").textContent=`${docName} · ${IDS.length} صفحة`;const L=sentList();L.forEach(f=>{if(f.srcName===old)f.srcName=v});saveSent(L);await saveDraft();toast("تمت التسمية: "+v)};
 /* ---- شاشة تسجيل الدخول لصاحب الملف ---- */
@@ -460,16 +479,18 @@ $("#pdfIn").onchange=async()=>{const f=$("#pdfIn").files[0];$("#pdfIn").value=""
       texts.push({ifada:boxText(items,vp,c.width,c.height,"ifada"),coords:boxText(items,vp,c.width,c.height,"coords"),all});cans.push(c);
       ids.push(id&&!ids.includes(id)?id:`صفحة ${n}`)}
     // تصميم البلاغات أم ملف عام يظهر كما هو
-    const kind=saved?(saved.kind||"report"):((incs||texts.some(t=>/الإفادة|إحداثيات/.test(t.all)))?"report":"plain");
+    const guess=saved?(saved.kind||"report"):((incs||texts.some(t=>/الإفادة|إحداثيات/.test(t.all)))?"report":"plain");
     const useSaved=saved&&saved.data.length===cans.length;
+    const finalIds=useSaved&&Array.isArray(saved.ids)&&saved.ids.length===cans.length&&new Set(saved.ids).size===cans.length?saved.ids.map(String):ids;
+    b.textContent="اختر اسماً للملف…";
+    // يختار المستخدم نوع الملف (مقترح تلقائياً) قبل تجهيز الصفحات
+    const name=await askName(suggestNames(f.name,guess,finalIds),`${cans.length} صفحة`,"",guess);
+    if(!name){toast("أُلغي الإرفاق");return}
+    const kind=DLG_KIND;
     const pages=cans.map((c,i)=>{const ctx=c.getContext("2d",{willReadFrequently:true});if(kind==="report")cleanBoxes(ctx,c.width,c.height);
       const fr=useSaved&&Array.isArray(saved.data[i].free)?saved.data[i].free.filter(okBox):[];
       fr.forEach(fb=>cleanRect(ctx,c.width,fb.x/100*c.width,fb.y/100*c.height,fb.w/100*c.width,fb.h/100*c.height,false));
       return c.toDataURL("image/jpeg",.8)});
-    const finalIds=useSaved&&Array.isArray(saved.ids)&&saved.ids.length===pages.length&&new Set(saved.ids).size===pages.length?saved.ids.map(String):ids;
-    b.textContent="اختر اسماً للملف…";
-    const name=await askName(suggestNames(f.name,kind,finalIds),`${pages.length} صفحة · `+(kind==="report"?"تصميم البلاغات":"ملف عام — يظهر كما هو وتضيف عليه نصوصاً"));
-    if(!name){toast("أُلغي الإرفاق");return}
     if(PAGES.length)await saveDraft();
     setCur(newId());KIND=kind;docName=name;load(pages,finalIds);
     let found=0;
