@@ -90,7 +90,7 @@ var FB_KEY = "AIzaSyCj_IStSKuqHpVCbSFk6cpElCRxkFBUeeg";  // Web API key من Fir
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <noscript><p style="padding:24px;text-align:center">افتح رابط النموذج في Safari أو Chrome. معاينة المرفقات لا تشغّل نموذج التعبئة.</p></noscript>
 <script id="app">
-const VER="v10.4";
+const VER="v10.5";
 const SRC={cfg:document.getElementById("cfg").textContent,app:document.getElementById("app").textContent,css:document.getElementById("css").textContent};
 const LINK_ID=new URL(location.href).searchParams.get("report");
 let EMB=(typeof EMBED!=="undefined")?EMBED:(LINK_ID?{fid:LINK_ID,linkMode:true}:null);
@@ -193,10 +193,11 @@ document.body.innerHTML=`
 <button class="b-mail" id="btnMail" type="button" hidden>✉️ إرسال إيميل</button>
 <button class="b-wipe" id="btnWipeAll" type="button" hidden>🧽 مسح كل الكتابات</button>
 <button class="b-pdf" id="btnDelete" type="button" hidden>🗑 حذف الملف</button>
-<label class="hrs" id="hrsBox" hidden>صلاحية ملف الإرسال <select id="hrs" aria-label="مدة صلاحية ملف الإرسال">${Array.from({length:24},(_,i)=>`<option value="${i+1}"${i===23?" selected":""}>${i+1} ساعة</option>`).join("")}</select></label>
+<label class="hrs" id="hrsBox" hidden>صلاحية ملف الإرسال <select id="hrs" aria-label="مدة صلاحية ملف الإرسال">${Array.from({length:48},(_,i)=>`<option value="${i+1}"${i===47?" selected":""}>${i+1} ساعة</option>`).join("")}</select></label>
 <label class="hrs" id="retBox" hidden><input type="checkbox" id="showRet"> إظهار زر «إرسال للمرسل» للمستفيد</label>
 <button class="b-send" id="btnLink" type="button" hidden>🔗 رابط للمستلم</button>
 <button class="b-send" id="btnHtml" type="button" hidden>📦 ملف للإرسال</button>
+<button class="b-link" id="btnSite" type="button" hidden>💾 تصدير ملف الموقع</button>
 <div class="done" id="done" hidden></div><div class="status" id="status"></div></div></header>
 <main class="wrap" hidden id="main"><details class="sent" id="sent" open hidden><summary>الملفات المرسلة — تمديد وإيقاف</summary><div class="owner" id="owner"></div><p>أرسل «رابط للمستلم» للآيفون والأندرويد. يبقى التمديد والإيقاف والتشغيل والحذف بجوار كل ملف. يلزم اتصال المستلم بالإنترنت للتحقق من صلاحية الملف.</p><p id="noSent">لا توجد ملفات مرسلة بعد.</p><ul id="sentList"></ul></details>
 <details class="picker" id="picker" hidden><summary>📑 صفحات الملف — اختيار وشرح <span id="pkCount"></span></summary>
@@ -265,6 +266,19 @@ function readEmbedded(raw){try{const head=new TextDecoder("latin1").decode(raw.s
 function embedMeta(){return bytes64(new TextEncoder().encode(JSON.stringify({v:1,ids:IDS,data:IDS.map(id=>({ifada:state[id].ifada||"",coords:state[id].coords||""}))})))}
 
 $("#btnAttach").onclick=()=>$("#pdfIn").click();
+/* تصدير ملف الموقع: ينزّل نسخة HTML من الموقع نفسه بنفس الإعدادات لرفعها أو الاحتفاظ بها */
+$("#btnSite").hidden=!!EMB;
+$("#btnSite").onclick=()=>{
+  const lt="<",doc=`${lt}!doctype html>${lt}html lang="ar" dir="rtl">${lt}head>${lt}meta charset="utf-8">\n${lt}meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n${lt}title>تعبئة البلاغات${lt}/title>\n`+
+   `${lt}link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap">\n${lt}style id="css">${SRC.css}${lt}/style>${lt}/head>${lt}body>\n`+
+   `${lt}script id="cfg">${SRC.cfg}${lt}/script>\n${lt}script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js">${lt}/script>\n`+
+   `${lt}noscript>${lt}p style="padding:24px;text-align:center">افتح رابط النموذج في Safari أو Chrome. معاينة المرفقات لا تشغّل نموذج التعبئة.${lt}/p>${lt}/noscript>\n`+
+   `${lt}script id="app">${SRC.app}${lt}/script>\n${lt}/body>${lt}/html>\n`;
+  const blob=new Blob([doc],{type:"text/html"}),name="index.html";
+  const a=el("a",{href:URL.createObjectURL(blob),download:name});document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+  toast("تم تصدير ملف الموقع ("+VER+") باسم index.html");
+};
 $("#pdfIn").onchange=async()=>{const f=$("#pdfIn").files[0];$("#pdfIn").value="";if(!f)return;
   const normalizedName=n=>String(n).normalize("NFC").trim().replace(/\.pdf$/i,"").trim().toLocaleLowerCase();
   if(PAGES.length&&normalizedName(f.name)===normalizedName(docName)){
@@ -506,13 +520,13 @@ function renderSent(){const box=$("#sent");if(EMB){box.hidden=true;return}render
       const live=d.until>Date.now();stt.textContent=(live?"🟢 متاح حتى ":"🔴 انتهى ")+fmt(d.until);stt.className="stt "+(live?"on":"off")};
     if(typeof f.active==="boolean")paint(f);
     fbGet(f.fid).then(d=>{if(d!==undefined)paint(d);else if(typeof f.active!=="boolean")paint(d)});
-    const hs=el("select",{},Array.from({length:24},(_,i)=>`<option value="${i+1}"${i+1===f.hours?" selected":""}>${i+1} س</option>`).join(""));hs.setAttribute("aria-label","مدة التمديد");
+    const hs=el("select",{},Array.from({length:48},(_,i)=>`<option value="${i+1}"${i+1===f.hours?" selected":""}>${i+1} س</option>`).join(""));hs.setAttribute("aria-label","مدة التمديد");
     const xb=el("button",{type:"button",className:"b-send",textContent:"⏱ تمديد"}),sb=el("button",{type:"button",className:"b-pdf",textContent:"⛔ إيقاف"}),ab=el("button",{type:"button",className:"b-link",textContent:"▶ تشغيل"});
     const act=async(btn,data,msg)=>{btn.disabled=true;try{if(!authGet()){needLogin();return}const update={...data,updatedAt:Date.now()};
       const saved=await fbPatch(f.fid,update);
       const current=sentList();const item=current.find(x=>x.fid===f.fid);if(item)Object.assign(item,saved||update);
       await saveSent(current);paint(item||saved||update);toast(msg)}catch(e){if(e.message==="login")needLogin();else toast("تعذّر الحفظ: "+e.message)}finally{btn.disabled=false}};
-    xb.onclick=()=>{const h=Math.min(24,Math.max(1,+hs.value||24));act(xb,{until:Date.now()+h*3600e3,active:true,name:f.name},`مُدّد ${h} ساعة من الآن`)};
+    xb.onclick=()=>{const h=Math.min(48,Math.max(1,+hs.value||48));act(xb,{until:Date.now()+h*3600e3,active:true,name:f.name},`مُدّد ${h} ساعة من الآن`)};
     sb.onclick=()=>act(sb,{active:false,name:f.name},"تم إيقاف الملف");ab.onclick=()=>act(ab,{active:true,name:f.name},"تم تشغيل الملف");
     const del=el("button",{type:"button",className:"b-pdf",textContent:"🗑 حذف",title:"حذف "+f.name});
     del.setAttribute("aria-label","حذف الملف "+f.name);
@@ -649,7 +663,7 @@ $("#btnHtml").onclick=async()=>{
   if(!IDS.length){toast("أرفق ملف PDF أولاً");return}
   if(!authGet()){needLogin();return}
   const btn=$("#btnHtml");btn.disabled=true;btn.textContent="جارٍ إنشاء ملف الإرسال…";
-  try{const h=Math.min(24,Math.max(1,parseInt($("#hrs").value)||24));const exp=new Date(Date.now()+h*3600e3).toISOString();
+  try{const h=Math.min(48,Math.max(1,parseInt($("#hrs").value)||48));const exp=new Date(Date.now()+h*3600e3).toISOString();
   const seed=crypto.getRandomValues(new Uint8Array(10)),fid=toHex(crypto.getRandomValues(new Uint8Array(6))),anchor=toHex(chainAt(seed,0));
   const list=sentList();list.unshift({fid,name:docName,count:IDS.length,created:Date.now(),hours:h,seed:toHex(seed),used:0});await fbPatch(fid,{until:Date.parse(exp),active:true,name:docName,created:Date.now(),count:IDS.length,hours:h});
   const kept=await saveSent(list);renderSent();
@@ -712,7 +726,7 @@ $("#btnLink").onclick=async()=>{
   if(!/^https?:$/.test(location.protocol)){toast("افتح موقع الاستضافة لإنشاء رابط للمستلم");return}
   const btn=$("#btnLink");btn.disabled=true;btn.textContent="جارٍ رفع النموذج…";
   try{
-    const h=Math.min(24,Math.max(1,+$("#hrs").value||24)),created=Date.now();
+    const h=Math.min(48,Math.max(1,+$("#hrs").value||48)),created=Date.now();
     const fid=toHex(crypto.getRandomValues(new Uint8Array(16)));
     const showRet=$("#showRet").checked;
     // الصفحات المختارة من القائمة، أو كل الصفحات إذا لم يُختر شيء
