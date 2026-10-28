@@ -170,6 +170,16 @@ body.lock{overflow:hidden}
 .kinds span{display:grid;gap:2px}.kinds b{font:800 .95rem var(--display)}.kinds small{color:var(--muted);font-size:.8rem}
 .fbox.ro{border-style:solid;background:rgba(255,243,176,.92);box-shadow:0 2px 6px rgba(0,0,0,.18)}
 .fbox.ro .fbar{cursor:default}
+.gray,button.gray:disabled{background:#9aa5b1!important;color:#eef1f4!important;opacity:1!important;cursor:not-allowed;filter:none}
+.btnctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex-basis:100%;font:700 .85rem var(--display);color:var(--muted)}
+.btnctl b{flex-basis:100%}
+.bsel{display:flex;align-items:center;gap:6px;flex:1 1 140px;color:var(--fg)}
+.bsel select{flex:1;min-height:40px;font:700 .85rem var(--display);padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+.savefab{position:fixed;z-index:12;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);min-width:min(260px,calc(100% - 32px));min-height:54px;border-radius:28px;background:var(--ok);font-size:1.1rem;box-shadow:0 6px 18px rgba(0,0,0,.28)}
+.savefab:active{transform:translateX(-50%) scale(.98)}
+.savefab.dirty::after{content:" — لم يُحفظ بعد";font-weight:600;font-size:.85rem}
+body:has(#btnSave:not([hidden])) main.wrap{padding-bottom:96px}
+body:has(#btnSave:not([hidden])) .toast{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 </style></head><body>
 <script id="cfg">
 /* ===================== الإعدادات — عدّل هنا فقط ===================== */
@@ -183,7 +193,12 @@ var FB_KEY = "AIzaSyCj_IStSKuqHpVCbSFk6cpElCRxkFBUeeg";  // Web API key من Fir
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <noscript><p style="padding:24px;text-align:center">افتح رابط النموذج في Safari أو Chrome. معاينة المرفقات لا تشغّل نموذج التعبئة.</p></noscript>
 <script id="app">
-const VER="v12.4";
+const VER="v13.0";
+/* أزرار المستفيد التي يتحكم فيها المرسل: ظاهر / رمادي / مخفي */
+const BTN_KEYS={wa:["#btnWa","🟢 واتساب"],mail:["#btnMail","✉️ إيميل"],pdf:["#btnPdf","📄 PDF"]};
+const BTN_MODES=[["on","ظاهر"],["gray","رمادي"],["hide","مخفي"]];
+const BTN_SEL=(pre,cur={})=>Object.entries(BTN_KEYS).map(([k,[,lab]])=>`<label class="bsel">${lab}<select data-k="${k}" data-pre="${pre}" aria-label="${lab}">${BTN_MODES.map(([v,t])=>`<option value="${v}"${(cur[k]||"gray")===v?" selected":""}>${t}</option>`).join("")}</select></label>`).join("");
+const readBtns=box=>Object.fromEntries([...box.querySelectorAll("select[data-k]")].map(x=>[x.dataset.k,x.value]));
 const SRC={cfg:document.getElementById("cfg").textContent,app:document.getElementById("app").textContent,css:document.getElementById("css").textContent};
 const LINK_ID=new URL(location.href).searchParams.get("report");
 let EMB=(typeof EMBED!=="undefined")?EMBED:(LINK_ID?{fid:LINK_ID,linkMode:true}:null);
@@ -191,7 +206,7 @@ let SUBMISSION_SENT=false,HAS_SENT=false,LAST_PDF=null;
 let REPLY_CHECKS=[];
 let KIND="report",CUR="",LIB=[];const isReport=()=>KIND!=="plain";
 let SEL=new Set(),SYNC_RETRY=null,SYNCED_PDF=null,SYNCING=null;
-const canReturn=()=>!!(EMB&&EMB.returnToken&&EMB.showReturn);
+const canReturn=()=>false;
 const VERIFIED_REPLIES=new Map();
 const BOX={ifada:[37.1,54.43,58.47,42.62],coords:[4.43,74.84,29.03,22.24]};
 const SLOT={before:51.1,after:12.5};
@@ -267,7 +282,7 @@ async function saveDraft(){
     if(!EMB&&CUR){const meta={id:CUR,name:docName,count:IDS.length,kind:KIND,updated:Date.now()},x=LIB.find(l=>l.id===CUR);if(x)Object.assign(x,meta);else LIB.unshift(meta);await saveIndex();renderLib()}
   }catch(e){console.warn("Draft save failed",e);if(!draftWarning){draftWarning=true;toast("تعذّر الحفظ التلقائي. جهّز PDF وحمّله قبل مغادرة الصفحة")}}
 }
-function scheduleDraft(){LAST_PDF=null;clearTimeout(draftTimer);draftTimer=setTimeout(saveDraft,350)}
+function scheduleDraft(){LAST_PDF=null;if(EMB){const sb=document.getElementById("btnSave");if(sb)sb.classList.add("dirty")}clearTimeout(draftTimer);draftTimer=setTimeout(saveDraft,350)}
 async function readDraft(){
   try{const db=await draftDB();return await new Promise((resolve,reject)=>{
     const tx=db.transaction("drafts","readonly"),r=tx.objectStore("drafts").get(draftKey());
@@ -307,6 +322,7 @@ function askName(sugs,info,except,kind){return new Promise(res=>{const D=$("#nam
 function validDraft(d){return d&&Array.isArray(d.pages)&&d.pages.length&&Array.isArray(d.ids)&&d.ids.length===d.pages.length&&d.state&&typeof d.state==="object"}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")saveDraft()});
 window.addEventListener("pagehide",()=>saveDraft());
+window.addEventListener("beforeunload",e=>{const b=document.getElementById("btnSave");if(EMB&&b&&!b.hidden&&b.classList.contains("dirty")){e.preventDefault();e.returnValue=""}});
 
 document.body.innerHTML=`
 <div class="gate" id="gate" hidden><form id="gateForm" onsubmit="return false"></form></div>
@@ -344,13 +360,14 @@ document.body.innerHTML=`
 </div></div>
 <div class="grp" id="acctGrp"><h3>الحساب</h3><div class="owner" id="owner"></div></div>
 </aside>
+<button type="button" class="savefab" id="btnSave" hidden>💾 حفظ</button>
 <main class="wrap" hidden id="main">
 <div class="libbar" id="libGrp"><label for="libSel">📂 ملفاتي</label><select id="libSel"></select>
 <button class="b-link" id="btnRename" type="button" hidden>✏️ تسمية</button><button class="b-link" id="btnKind" type="button" hidden>🔁 نوع الملف</button><button class="b-send" id="btnNew" type="button">➕ ملف جديد</button></div>
 <div class="statusbox"><div class="status" id="status"></div><div class="done" id="done" hidden></div></div>
 <section class="linkcard" id="linkCard" hidden><h2>🔗 الربط والتمديد</h2>
 <p class="hint" id="linkHint">أرفق ملف PDF من القائمة الجانبية لإنشاء رابط للمستلم.</p>
-<div class="row"><label class="hrs" id="hrsBox" hidden>صلاحية ملف الإرسال <select id="hrs" aria-label="مدة صلاحية ملف الإرسال">${Array.from({length:48},(_,i)=>`<option value="${i+1}"${i===47?" selected":""}>${i+1} ساعة</option>`).join("")}</select></label><label class="hrs" id="retBox" hidden><input type="checkbox" id="showRet"> إظهار زر «إرسال للمرسل» للمستفيد</label></div>
+<div class="row"><label class="hrs" id="hrsBox" hidden>صلاحية ملف الإرسال <select id="hrs" aria-label="مدة صلاحية ملف الإرسال">${Array.from({length:48},(_,i)=>`<option value="${i+1}"${i===47?" selected":""}>${i+1} ساعة</option>`).join("")}</select></label><div class="hrs btnctl" id="retBox" hidden><b>أزرار المستفيد:</b>${BTN_SEL("new")}</div></div>
 <div class="row"><button class="b-send" id="btnLink" type="button" hidden>🔗 رابط للمستلم</button>
 <button class="b-send" id="btnHtml" type="button" hidden>📦 ملف للإرسال</button></div></section>
 <details class="sent" id="sent" open hidden><summary>⏱ الملفات المرسلة — التمديد والإيقاف</summary><p>أرسل «رابط للمستلم» للآيفون والأندرويد. يبقى التمديد والإيقاف والتشغيل والحذف بجوار كل ملف. يلزم اتصال المستلم بالإنترنت للتحقق من صلاحية الملف.</p><p id="noSent">لا توجد ملفات مرسلة بعد.</p><ul id="sentList"></ul></details>
@@ -406,9 +423,12 @@ setTimeout(async()=>{if(EMB&&EMB.fid&&FB_DB){$("#gate").hidden=false;$("#gateFor
     }catch(e){console.warn(e);showClosed("تعذّر فتح النموذج",e.message||"تحقق من الرابط والاتصال")}
   }
   if(!EMB)await restoreSent();renderSent();
-  setInterval(async()=>{await fetchRemote();if(stopped()){if(!CLOSED)closeNow()}else if(CLOSED)location.reload();else if(EMB)$("#status").textContent="اكتب في المربعات وغيّر الصور، ثم اضغط «تجهيز PDF»."+untilText();else if(!EMB)checkReplies()},15000)},0);
+  setInterval(async()=>{await fetchRemote();if(stopped()){if(!CLOSED)closeNow()}else if(CLOSED)location.reload();else if(EMB){applyBtns();$("#status").textContent="عدّل ما تريد ثم اضغط «💾 حفظ» ليصل للمرسل."+untilText()}else if(!EMB)checkReplies()},15000)},0);
 window.addEventListener("offline",()=>{if(EMB&&EMB.fid&&FB_DB){RSTATE="fail";closeNow()}});
 window.addEventListener("online",async()=>{if(EMB&&EMB.fid&&FB_DB){await fetchRemote();if(stopped())closeNow();else if(CLOSED)location.reload()}});
+function applyBtns(){if(!EMB||!IDS.length)return;const c=(REMOTE&&REMOTE.btns)||{};
+  for(const [k,[sel]] of Object.entries(BTN_KEYS)){const b=$(sel);if(!b)continue;const m=c[k]||"gray",off=m!=="on";b.hidden=m==="hide";b.classList.toggle("gray",off);b.disabled=off;b.title=off?"غير متاح":""}
+  $("#btnSave").hidden=!EMB.returnToken}
 function remoteText(){if(!EMB||!EMB.fid)return "";return {ok:" · 🌐 متصل بالتحكم",none:" · ⚠️ الملف غير مسجّل في التحكم",fail:" · ⚠️ لا اتصال بالتحكم"}[RSTATE]||(RSTATE?" · ⚠️ خطأ "+RSTATE:"")}
 function untilText(){const t=effectiveExpiry();if(t===null)return "";const d=new Date(t);return remoteText()+" · متاح حتى "+d.toLocaleString("ar-SA-u-ca-gregory",{weekday:"long",hour:"numeric",minute:"2-digit"})}
 
@@ -508,8 +528,8 @@ $("#pdfIn").onchange=async()=>{const f=$("#pdfIn").files[0];$("#pdfIn").value=""
 function load(pages,ids){PAGES=pages;IDS=ids;state={};SEL.clear();IDS.forEach(id=>state[id]={ifada:"",coords:"",before:"",after:"",note:"",free:[]});
   if(EMB&&EMB.initialState)IDS.forEach(id=>{for(const k of ["ifada","coords","before","after","note"]){const v=EMB.initialState[id]?.[k];if(typeof v==="string")state[id][k]=v}const fr=EMB.initialState[id]?.free;if(Array.isArray(fr))state[id].free=fr.map(x=>({...x}))});
   restore();
-  $("#empty").hidden=true;$("#ttl").textContent=`${docName} · ${IDS.length} `+(isReport()?"بلاغ":"صفحة");$("#btnPdf").hidden=!!EMB&&!canReturn();$("#btnWa").hidden=false;$("#btnMail").hidden=false;$("#btnWipeAll").hidden=false;$("#btnPdf").textContent=EMB&&EMB.returnToken?(HAS_SENT?"📤 إعادة الإرسال للمرسل":"📤 إرسال للمرسل"):"📄 تجهيز PDF";$("#btnLink").hidden=!!EMB;$("#btnDelete").hidden=!!EMB;$("#btnHtml").hidden=!!EMB;$("#btnSite").hidden=!!EMB;$("#btnPages").hidden=!!EMB;$("#linkHint").hidden=true;$("#done").hidden=true;
-  $("#status").textContent=(isReport()?"اكتب في المربعات وغيّر الصور، ثم اضغط «تجهيز PDF». ":"الملف يظهر كما هو — اضغط «➕ إضافة نص» على أي صفحة لتكتب عليها، ثم «تصدير PDF». ")+"("+VER+")"+(EMB?untilText():"");$("#hrsBox").hidden=!!EMB;$("#retBox").hidden=!!EMB;build();scheduleDraft()}
+  $("#empty").hidden=true;$("#ttl").textContent=`${docName} · ${IDS.length} `+(isReport()?"بلاغ":"صفحة");$("#btnPdf").hidden=!!EMB&&!canReturn();$("#btnWa").hidden=false;$("#btnMail").hidden=false;$("#btnWipeAll").hidden=false;$("#btnPdf").textContent=EMB?"📄 تحميل PDF":"📄 تجهيز PDF";$("#btnLink").hidden=!!EMB;$("#btnDelete").hidden=!!EMB;$("#btnHtml").hidden=!!EMB;$("#btnSite").hidden=!!EMB;$("#btnPages").hidden=!!EMB;$("#linkHint").hidden=true;$("#done").hidden=true;
+  $("#status").textContent=(isReport()?"اكتب في المربعات وغيّر الصور، ثم اضغط «تجهيز PDF». ":"الملف يظهر كما هو — اضغط «➕ إضافة نص» على أي صفحة لتكتب عليها، ثم «تصدير PDF». ")+"("+VER+")"+(EMB?untilText():"");$("#hrsBox").hidden=!!EMB;$("#retBox").hidden=!!EMB;build();scheduleDraft();applyBtns();$("#btnSave").classList.remove("dirty")}
 
 function build(){const list=$("#list");list.innerHTML="";
   IDS.forEach((id,i)=>{const nt=el("div",{className:"pnote",id:"note_"+i});list.append(nt);
@@ -751,6 +771,8 @@ function renderSent(){const box=$("#sent");if(EMB){box.hidden=true;return}render
       finally{del.disabled=false}
     };
     li.append(el("div",{className:"ctl"}));li.lastChild.append(hs,xb,sb,ab,del);
+    const bc=el("div",{className:"btnctl"},"<b>أزرار المستفيد:</b>"+BTN_SEL(f.fid,f.btns||{}));
+    bc.querySelectorAll("select").forEach(x=>x.onchange=()=>act(x,{btns:readBtns(bc),name:f.name},"تم تحديث أزرار المستفيد"));li.append(bc);
     if(f.shareURL){const cp=el("button",{type:"button",className:"b-link",textContent:"🔗 نسخ الرابط"});cp.onclick=()=>showRecipientLink(f.shareURL);li.lastChild.append(cp)}
     if(f.returnEnabled){
       const received=el("span",{className:"stt",textContent:"📨 بانتظار إرسال المستلم"});
@@ -827,14 +849,21 @@ async function buildPdf(){
 }
 const pdfName=()=>docName.replace(/\s*-\s*معبأ$/,"")+" - معبأ.pdf";
 $("#btnPdf").onclick=async()=>{
-  if(EMB&&EMB.returnToken&&!SUBMISSION_SENT&&!confirm(HAS_SENT?"إرسال النسخة المعدّلة إلى المرسل؟ ستحلّ محل النسخة السابقة.":"هل تؤكد الانتهاء وإرسال PDF المعدّل إلى المرسل؟ يمكنك التعديل وإعادة الإرسال لاحقاً ما دام الرابط فعّالاً."))return;
+  if(false&&!confirm(HAS_SENT?"إرسال النسخة المعدّلة إلى المرسل؟ ستحلّ محل النسخة السابقة.":"هل تؤكد الانتهاء وإرسال PDF المعدّل إلى المرسل؟ يمكنك التعديل وإعادة الإرسال لاحقاً ما دام الرابط فعّالاً."))return;
   const btn=$("#btnPdf");btn.disabled=true;btn.textContent="جارٍ التحقق والتجهيز…";
   try{const pdfBlob=await buildPdf();if(!pdfBlob)return;
     LAST_PDF=new File([pdfBlob],pdfName(),{type:"application/pdf"});
-    if(EMB&&EMB.returnToken){btn.textContent="جارٍ إرسال الملف…";await sendSubmission(pdfBlob,true);lockSubmissionUI()}
+    if(false){await sendSubmission(pdfBlob,true);lockSubmissionUI()}
     else{offer(pdfBlob,pdfName(),"application/pdf",false);toast("ملف PDF جاهز")}}
-  catch(e){console.warn(e);toast((EMB&&EMB.returnToken?"تعذّر إرسال الملف: ":"تعذّر تجهيز الملف: ")+(e.message||e))}
-  finally{btn.disabled=!!SUBMISSION_SENT;btn.textContent=SUBMISSION_SENT?"✅ تم الإرسال":(EMB&&EMB.returnToken?(HAS_SENT?"📤 إعادة الإرسال للمرسل":"📤 إرسال للمرسل"):"📄 تجهيز PDF")}};
+  catch(e){console.warn(e);toast("تعذّر تجهيز الملف: "+(e.message||e))}
+  finally{btn.disabled=false;btn.textContent=EMB?"📄 تحميل PDF":"📄 تجهيز PDF";applyBtns()}};
+/* زر الحفظ عند المستفيد: يرسل التعديل للمرسل فيُدمج في ملفه الكامل، ويمكن الحفظ أكثر من مرة */
+$("#btnSave").onclick=async()=>{const b=$("#btnSave");if(!EMB||!EMB.returnToken)return;b.disabled=true;b.textContent="⏳ جارٍ الحفظ…";
+  try{const blob=await buildPdf();if(!blob)return;LAST_PDF=new File([blob],pdfName(),{type:"application/pdf"});
+    SUBMISSION_SENT=false;await sendSubmission(LAST_PDF,true);SUBMISSION_SENT=false;SYNCED_PDF=LAST_PDF;SYNC_RETRY=null;
+    b.classList.remove("dirty");b.textContent="✅ تم الحفظ";setTimeout(()=>{if(b.textContent==="✅ تم الحفظ")b.textContent="💾 حفظ"},3000)}
+  catch(e){console.warn(e);SUBMISSION_SENT=false;b.textContent="💾 حفظ";toast("لم يتم الحفظ: "+(e.message||e))}
+  finally{b.disabled=false}};
 /* Recipient: sending by WhatsApp or email also delivers the edits to the owner's control panel. */
 async function syncBack(pdf){
   if(!EMB||!EMB.returnToken||!pdf)return true;
@@ -940,7 +969,7 @@ $("#btnLink").onclick=async()=>{
   try{
     const h=Math.min(48,Math.max(1,+$("#hrs").value||48)),created=Date.now();
     const fid=toHex(crypto.getRandomValues(new Uint8Array(16)));
-    const showRet=$("#showRet").checked;
+    const showRet=false,btns=readBtns($("#retBox"));
     // الصفحات المختارة من القائمة، أو كل الصفحات إذا لم يُختر شيء
     const selIds=SEL.size?IDS.filter(id=>SEL.has(id)):IDS.slice();
     const pageNums=selIds.map(id=>IDS.indexOf(id)+1);
@@ -954,7 +983,7 @@ $("#btnLink").onclick=async()=>{
     if(returnToken)await ownerRequest("submissionKeys/"+fid,"PUT",{token:returnToken,key:encrypted.key});
     // Content remains encrypted in the database; the key is carried only by the recipient URL.
     await fbPatch("_content_"+fid,encrypted.stored);
-    const meta={until:created+h*3600e3,active:true,name:docName,created,count:selIds.length,hours:h,mode:"link",returnEnabled:!!returnToken,updatedAt:created};
+    const meta={until:created+h*3600e3,active:true,name:docName,created,count:selIds.length,hours:h,mode:"link",returnEnabled:!!returnToken,btns,updatedAt:created};
     await fbPatch(fid,meta);
     const shareURL=makeRecipientURL(fid,encrypted.key);
     const list=sentList();list.unshift({fid,...meta,shareURL,seed:"",used:0,srcName:docName,pageNums});await saveSent(list);
@@ -1045,7 +1074,7 @@ async function sendSubmission(pdf,confirmed=false){
       throw e;
     }
   }
-  const resent=HAS_SENT;SUBMISSION_SENT=true;HAS_SENT=true;await saveDraft();toast(resent?"تم إرسال التعديل للمرسل بنجاح":"تم إرسال الملف المعدّل للمرسل بنجاح");
+  const resent=HAS_SENT;SUBMISSION_SENT=true;HAS_SENT=true;await saveDraft();toast("✅ تم الحفظ ووصل التعديل للمرسل");
 }
 function setEditable(on){
   document.querySelectorAll(".sheet > textarea").forEach(e=>e.readOnly=!on);
