@@ -197,7 +197,7 @@ var FB_KEY = "AIzaSyCj_IStSKuqHpVCbSFk6cpElCRxkFBUeeg";  // Web API key من Fir
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <noscript><p style="padding:24px;text-align:center">افتح رابط النموذج في Safari أو Chrome. معاينة المرفقات لا تشغّل نموذج التعبئة.</p></noscript>
 <script id="app">
-const VER="v13.2";
+const VER="v13.3";
 /* المربعات التي يختارها المرسل ليعدّلها المستفيد؛ غير المختارة تظهر للقراءة فقط */
 const FIELD_KEYS={ifada:"📝 الإفادة",coords:"📍 الإحداثيات",before:"📷 صورة قبل",after:"📷 صورة بعد",wipe:"🧽 مسح الكتابة"};
 const FLD_SEL=(cur)=>Object.entries(FIELD_KEYS).map(([k,lab])=>`<label class="fsel"><input type="checkbox" data-f="${k}"${cur&&cur[k]===false?"":" checked"}> ${lab}</label>`).join("");
@@ -310,7 +310,7 @@ function renderLib(){const sel=$("#libSel");if(!sel)return;sel.innerHTML="";
   else{sel.disabled=false;LIB.forEach(x=>{const o=el("option",{value:x.id,textContent:`${x.name} · ${x.count} صفحة`+(x.kind==="plain"?" · ملف عام":"")});o.selected=x.id===CUR;sel.append(o)})}
   $("#btnRename").hidden=!CUR;$("#btnKind").hidden=!CUR||!IDS.length;$("#btnKind").textContent=isReport()?"🔁 تحويل لملف عام":"🔁 تحويل لتصميم البلاغات"}
 function applyDraft(d){KIND=d.kind||"report";docName=d.name||docName;load(d.pages,d.ids);
-  IDS.forEach(id=>{const old=d.state[id];if(!old)return;for(const k of ["ifada","coords","before","after","note"])if(typeof old[k]==="string")state[id][k]=old[k];if(Array.isArray(old.free))state[id].free=old.free;if(old.box&&typeof old.box==="object")state[id].box=old.box});
+  IDS.forEach(id=>{const old=d.state[id];if(!old)return;for(const k of ["ifada","coords","before","after","note"])if(typeof old[k]==="string")state[id][k]=old[k];if(Array.isArray(old.free))state[id].free=old.free;if(old.box&&typeof old.box==="object"&&old.box.v===2)state[id].box=old.box});
   build();fixBoxes()}
 async function switchFile(id){if(!id||id===CUR)return;await saveDraft();setCur(id);const d=await readDraft();
   if(validDraft(d)){applyDraft(d);$("#done").hidden=true;toast("فُتح «"+docName+"»")}else toast("تعذّر فتح الملف المحفوظ");renderLib()}
@@ -492,24 +492,28 @@ function detectBoxes(ctx,W,H){const out={};let d;try{d=ctx.getImageData(0,0,W,H)
   for(const k of ["ifada","coords"]){const b=BOX[k];
     const xa=Math.round((b[0]+b[2]*.25)/100*W),xb=Math.round((b[0]+b[2]*.75)/100*W),cx=Math.round((b[0]+b[2]/2)/100*W);
     const ya=Math.max(0,Math.round((b[1]-14)/100*H)),yb=Math.min(H-1,Math.round((b[1]+b[3]+6)/100*H));
-    const darkRow=y=>{let n=0,t=0;for(let x=xa;x<=xb;x+=3){t++;if(lum(x,y)<150)n++}return n/t>=.8};
+    const darkRow=y=>{let n=0,t=0;for(let x=xa;x<=xb;x+=3){t++;if(lum(x,y)<150)n++}return n/t>=.6};
     const runs=[];let s0=-1;for(let y=ya;y<H;y++){const dk=darkRow(y);if(dk&&s0<0)s0=y;if(!dk&&s0>=0){runs.push([s0,y-1]);s0=-1}}if(s0>=0)runs.push([s0,H-1]);
+    for(let j=runs.length-1;j>0;j--)if(runs[j][0]-runs[j-1][1]<=Math.max(3,.004*H)){runs[j-1][1]=runs[j][1];runs.splice(j,1)}
     let best=null;
     runs.forEach((r,j)=>{if(r[0]>yb||r[1]-r[0]+1<.008*H||r[1]-r[0]+1>.045*H)return;const top=r[1]+1,nx=runs[j+1],bot=nx?nx[0]-1:H-2,h=bot-top;
       if(h<.06*H)return;if(!best||h>best.h)best={bar:r,top,h}});
     if(!best)continue;
-    const my=Math.round((best.bar[0]+best.bar[1])/2);let L=cx,R=cx,gap=0;
-    for(let x=cx;x>=0;x--){if(lum(x,my)<150){L=x;gap=0}else if(++gap>.015*W)break}
-    gap=0;for(let x=cx;x<W;x++){if(lum(x,my)<150){R=x;gap=0}else if(++gap>.015*W)break}
+    // حواف الشريط تُقاس من صفوفه العليا والسفلى (بعيداً عن نص العنوان والأيقونة في منتصفه)
+    let L=cx,R=cx;const bh=best.bar[1]-best.bar[0];
+    for(const my of [best.bar[0]+1,best.bar[0]+Math.max(2,Math.round(bh*.15)),best.bar[1]-Math.max(2,Math.round(bh*.15)),best.bar[1]-1]){
+      let gap=0,l=cx,r=cx;for(let x=cx;x>=0;x--){if(lum(x,my)<150){l=x;gap=0}else if(++gap>.015*W)break}
+      gap=0;for(let x=cx;x<W;x++){if(lum(x,my)<150){r=x;gap=0}else if(++gap>.015*W)break}
+      if(l<L)L=l;if(r>R)R=r}
     if(R-L<.15*W)continue;
     const ix=.007*W,iy=.005*H;
     out[k]=[(L+ix)/W*100,(best.top+iy)/H*100,(R-L-2*ix)/W*100,(best.h-2*iy)/H*100].map(v=>+v.toFixed(2))}
-  return out}
+  out.v=2;return out}
 /* للملفات المحفوظة قبل هذا الإصدار: يحاول اكتشاف المربعات من صور الصفحات */
 async function fixBoxes(){if(!isReport())return;let ch=false;const snap=IDS.slice();
   for(let i=0;i<snap.length;i++){const st=state[snap[i]];if(IDS[i]!==snap[i])return;if(!st||st.box)continue;
     try{const im=await loadImg(PAGES[i]);const c=el("canvas");c.width=im.width;c.height=im.height;const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,0,0);
-      if(state[snap[i]]!==st)return;st.box=detectBoxes(ctx,c.width,c.height);if(st.box.ifada||st.box.coords)ch=true}catch(_){st.box={}}}
+      if(state[snap[i]]!==st)return;st.box=detectBoxes(ctx,c.width,c.height);if(st.box.ifada||st.box.coords){cleanBoxes(ctx,c.width,c.height,st.box);PAGES[i]=c.toDataURL("image/jpeg",.8);ch=true}}catch(_){st.box={}}}
   if(ch){build();store()}}
 function readEmbedded(raw){try{const head=new TextDecoder("latin1").decode(raw.subarray(0,Math.min(raw.length,8e6)));const m=head.match(/%TAIF:([A-Za-z0-9+\/=]+)/);if(!m)return null;
   const o=JSON.parse(new TextDecoder().decode(decode64(m[1])));return o&&o.v===1&&Array.isArray(o.data)?o:null}catch(_){return null}}
