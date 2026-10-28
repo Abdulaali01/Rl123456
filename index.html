@@ -197,7 +197,7 @@ var FB_KEY = "AIzaSyCj_IStSKuqHpVCbSFk6cpElCRxkFBUeeg";  // Web API key من Fir
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <noscript><p style="padding:24px;text-align:center">افتح رابط النموذج في Safari أو Chrome. معاينة المرفقات لا تشغّل نموذج التعبئة.</p></noscript>
 <script id="app">
-const VER="v13.1";
+const VER="v13.2";
 /* المربعات التي يختارها المرسل ليعدّلها المستفيد؛ غير المختارة تظهر للقراءة فقط */
 const FIELD_KEYS={ifada:"📝 الإفادة",coords:"📍 الإحداثيات",before:"📷 صورة قبل",after:"📷 صورة بعد",wipe:"🧽 مسح الكتابة"};
 const FLD_SEL=(cur)=>Object.entries(FIELD_KEYS).map(([k,lab])=>`<label class="fsel"><input type="checkbox" data-f="${k}"${cur&&cur[k]===false?"":" checked"}> ${lab}</label>`).join("");
@@ -310,8 +310,8 @@ function renderLib(){const sel=$("#libSel");if(!sel)return;sel.innerHTML="";
   else{sel.disabled=false;LIB.forEach(x=>{const o=el("option",{value:x.id,textContent:`${x.name} · ${x.count} صفحة`+(x.kind==="plain"?" · ملف عام":"")});o.selected=x.id===CUR;sel.append(o)})}
   $("#btnRename").hidden=!CUR;$("#btnKind").hidden=!CUR||!IDS.length;$("#btnKind").textContent=isReport()?"🔁 تحويل لملف عام":"🔁 تحويل لتصميم البلاغات"}
 function applyDraft(d){KIND=d.kind||"report";docName=d.name||docName;load(d.pages,d.ids);
-  IDS.forEach(id=>{const old=d.state[id];if(!old)return;for(const k of ["ifada","coords","before","after","note"])if(typeof old[k]==="string")state[id][k]=old[k];if(Array.isArray(old.free))state[id].free=old.free});
-  build()}
+  IDS.forEach(id=>{const old=d.state[id];if(!old)return;for(const k of ["ifada","coords","before","after","note"])if(typeof old[k]==="string")state[id][k]=old[k];if(Array.isArray(old.free))state[id].free=old.free;if(old.box&&typeof old.box==="object")state[id].box=old.box});
+  build();fixBoxes()}
 async function switchFile(id){if(!id||id===CUR)return;await saveDraft();setCur(id);const d=await readDraft();
   if(validDraft(d)){applyDraft(d);$("#done").hidden=true;toast("فُتح «"+docName+"»")}else toast("تعذّر فتح الملف المحفوظ");renderLib()}
 function suggestNames(fname,kind,ids){const base=String(fname).replace(/\.pdf$/i,"").replace(/[_]+/g," ").replace(/\s*-\s*معبأ$/,"").trim()||"ملف";
@@ -402,7 +402,7 @@ $("#btnKind").onclick=async()=>{if(!IDS.length)return;const toRep=!isReport();
   if(!confirm(toRep?"تحويل «"+docName+"» إلى تصميم البلاغات؟ تظهر مربعات الإفادة والإحداثيات وصور قبل/بعد على كل صفحة، ويُمسح ما تحت مربعي الإفادة والإحداثيات.":"تحويل «"+docName+"» إلى ملف عام؟ تختفي مربعات الإفادة والإحداثيات والصور، وتبقى النصوص المضافة."))return;
   const b=$("#btnKind");b.disabled=true;
   try{if(toRep)for(let i=0;i<PAGES.length;i++){b.textContent=`جارٍ التحويل ${i+1}/${PAGES.length}…`;const im=await loadImg(PAGES[i]);const c=el("canvas");c.width=im.width;c.height=im.height;
-      const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,0,0);cleanBoxes(ctx,c.width,c.height);PAGES[i]=c.toDataURL("image/jpeg",.8)}
+      const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,0,0);const st=state[IDS[i]];st.box=detectBoxes(ctx,c.width,c.height);cleanBoxes(ctx,c.width,c.height,st.box);PAGES[i]=c.toDataURL("image/jpeg",.8)}
     KIND=toRep?"report":"plain";$("#ttl").textContent=`${docName} · ${IDS.length} `+(isReport()?"بلاغ":"صفحة");build();store();await saveDraft();toast(toRep?"تم التحويل لتصميم البلاغات — المربعات جاهزة للتعديل":"تم التحويل لملف عام")}
   catch(e){console.warn(e);toast("تعذّر التحويل")}finally{b.disabled=false;renderLib()}};
 $("#btnRename").onclick=async()=>{if(!CUR)return;const old=docName,v=await askName([docName],"غيّر اسم الملف المفتوح",CUR);if(!v||v===old)return;
@@ -467,8 +467,8 @@ async function openApp(){
 }
 
 /* ---- الكتابة السابقة: تُقرأ من الملف وتُمسح من خلفية الصفحة لتظهر قابلة للتعديل ---- */
-function boxText(items,vp,W,H,k){
-  const b=BOX[k],x0=b[0]/100*W,y0=b[1]/100*H,x1=x0+b[2]/100*W,y1=y0+b[3]/100*H,rows=[];
+function boxText(items,vp,W,H,k,bx){
+  const b=(bx&&bx[k])||BOX[k],x0=b[0]/100*W,y0=b[1]/100*H,x1=x0+b[2]/100*W,y1=y0+b[3]/100*H,rows=[];
   for(const it of items){if(!it.str||!it.str.trim())continue;
     const m=pdfjsLib.Util.transform(vp.transform,it.transform),x=m[4],y=m[5],w=(it.width||0)*vp.scale,cx=x+w/2,fh=Math.hypot(m[2],m[3])||10;
     if(cx<x0||cx>x1||y<y0||y>y1+4)continue;
@@ -484,7 +484,33 @@ function cleanRect(ctx,W,X,Y,BW,BH,dashed){const i=Math.max(3,W*.004),x=Math.rou
   const RX=Math.round(X)-1,RY=Math.round(Y)-1,RW=Math.round(BW)+2,RH=Math.round(BH)+2;ctx.fillStyle=fill;ctx.fillRect(RX,RY,RW,RH);
   if(dashed){ctx.save();ctx.setLineDash([Math.max(3,W*.004),Math.max(2,W*.003)]);ctx.lineWidth=Math.max(1,W*.0015);ctx.strokeStyle="#203a4c";
     const g=Math.max(3,W*.004);ctx.strokeRect(RX+g,RY+g,RW-2*g,RH-2*g);ctx.restore()}}
-function cleanBoxes(ctx,W,H){for(const k of ["ifada","coords"]){const b=BOX[k];cleanRect(ctx,W,b[0]/100*W,b[1]/100*H,b[2]/100*W,b[3]/100*H,true)}}
+function cleanBoxes(ctx,W,H,bx){for(const k of ["ifada","coords"]){const b=(bx&&bx[k])||BOX[k];cleanRect(ctx,W,b[0]/100*W,b[1]/100*H,b[2]/100*W,b[3]/100*H,true)}}
+const boxOf=(i,k)=>{const st=state[IDS[i]];return (st&&st.box&&st.box[k])||BOX[k]};
+/* يكتشف مكان مربعي الإفادة/الوصف والإحداثيات في كل صفحة: الشريط الملوّن للعنوان ثم المساحة تحته حتى الحد السفلي */
+function detectBoxes(ctx,W,H){const out={};let d;try{d=ctx.getImageData(0,0,W,H).data}catch(_){return out}
+  const lum=(x,y)=>{const p=(y*W+x)*4;return .299*d[p]+.587*d[p+1]+.114*d[p+2]};
+  for(const k of ["ifada","coords"]){const b=BOX[k];
+    const xa=Math.round((b[0]+b[2]*.25)/100*W),xb=Math.round((b[0]+b[2]*.75)/100*W),cx=Math.round((b[0]+b[2]/2)/100*W);
+    const ya=Math.max(0,Math.round((b[1]-14)/100*H)),yb=Math.min(H-1,Math.round((b[1]+b[3]+6)/100*H));
+    const darkRow=y=>{let n=0,t=0;for(let x=xa;x<=xb;x+=3){t++;if(lum(x,y)<150)n++}return n/t>=.8};
+    const runs=[];let s0=-1;for(let y=ya;y<H;y++){const dk=darkRow(y);if(dk&&s0<0)s0=y;if(!dk&&s0>=0){runs.push([s0,y-1]);s0=-1}}if(s0>=0)runs.push([s0,H-1]);
+    let best=null;
+    runs.forEach((r,j)=>{if(r[0]>yb||r[1]-r[0]+1<.008*H||r[1]-r[0]+1>.045*H)return;const top=r[1]+1,nx=runs[j+1],bot=nx?nx[0]-1:H-2,h=bot-top;
+      if(h<.06*H)return;if(!best||h>best.h)best={bar:r,top,h}});
+    if(!best)continue;
+    const my=Math.round((best.bar[0]+best.bar[1])/2);let L=cx,R=cx,gap=0;
+    for(let x=cx;x>=0;x--){if(lum(x,my)<150){L=x;gap=0}else if(++gap>.015*W)break}
+    gap=0;for(let x=cx;x<W;x++){if(lum(x,my)<150){R=x;gap=0}else if(++gap>.015*W)break}
+    if(R-L<.15*W)continue;
+    const ix=.007*W,iy=.005*H;
+    out[k]=[(L+ix)/W*100,(best.top+iy)/H*100,(R-L-2*ix)/W*100,(best.h-2*iy)/H*100].map(v=>+v.toFixed(2))}
+  return out}
+/* للملفات المحفوظة قبل هذا الإصدار: يحاول اكتشاف المربعات من صور الصفحات */
+async function fixBoxes(){if(!isReport())return;let ch=false;const snap=IDS.slice();
+  for(let i=0;i<snap.length;i++){const st=state[snap[i]];if(IDS[i]!==snap[i])return;if(!st||st.box)continue;
+    try{const im=await loadImg(PAGES[i]);const c=el("canvas");c.width=im.width;c.height=im.height;const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,0,0);
+      if(state[snap[i]]!==st)return;st.box=detectBoxes(ctx,c.width,c.height);if(st.box.ifada||st.box.coords)ch=true}catch(_){st.box={}}}
+  if(ch){build();store()}}
 function readEmbedded(raw){try{const head=new TextDecoder("latin1").decode(raw.subarray(0,Math.min(raw.length,8e6)));const m=head.match(/%TAIF:([A-Za-z0-9+\/=]+)/);if(!m)return null;
   const o=JSON.parse(new TextDecoder().decode(decode64(m[1])));return o&&o.v===1&&Array.isArray(o.data)?o:null}catch(_){return null}}
 function embedMeta(){return bytes64(new TextEncoder().encode(JSON.stringify({v:1,kind:KIND,ids:IDS,data:IDS.map(id=>({ifada:state[id].ifada||"",coords:state[id].coords||"",free:(state[id].free||[]).filter(f=>(f.t||"").trim())}))})))}
@@ -506,14 +532,14 @@ $("#pdfIn").onchange=async()=>{const f=$("#pdfIn").files[0];$("#pdfIn").value=""
   const b=$("#btnAttach");b.disabled=true;
   try{pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
     const raw=new Uint8Array(await f.arrayBuffer());const saved=readEmbedded(raw);
-    const pdf=await pdfjsLib.getDocument({data:raw}).promise;const cans=[],ids=[],texts=[];let incs=0;
+    const pdf=await pdfjsLib.getDocument({data:raw}).promise;const cans=[],ids=[],texts=[],boxes=[];let incs=0;
     for(let n=1;n<=pdf.numPages;n++){b.textContent=`جارٍ القراءة ${n}/${pdf.numPages}…`;
       const pg=await pdf.getPage(n);const v1=pg.getViewport({scale:1});const vp=pg.getViewport({scale:910/v1.width});
       const c=el("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);const ctx=c.getContext("2d",{willReadFrequently:true});ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
       await pg.render({canvasContext:ctx,viewport:vp}).promise;
       let items=[];try{items=(await pg.getTextContent()).items}catch(_){}
       const all=items.map(x=>x.str).join(" ");let id="";const m=all.match(/INC-\d{2}-\d{2}-\d{4,}/);if(m){id=m[0];incs++}
-      texts.push({ifada:boxText(items,vp,c.width,c.height,"ifada"),coords:boxText(items,vp,c.width,c.height,"coords"),all});cans.push(c);
+      const bx=detectBoxes(ctx,c.width,c.height);boxes.push(bx);texts.push({ifada:boxText(items,vp,c.width,c.height,"ifada",bx),coords:boxText(items,vp,c.width,c.height,"coords",bx),all});cans.push(c);
       ids.push(id&&!ids.includes(id)?id:`صفحة ${n}`)}
     // تصميم البلاغات أم ملف عام يظهر كما هو
     const guess=saved?(saved.kind||"report"):((incs||texts.some(t=>/الإفادة|إحداثيات/.test(t.all)))?"report":"plain");
@@ -524,14 +550,14 @@ $("#pdfIn").onchange=async()=>{const f=$("#pdfIn").files[0];$("#pdfIn").value=""
     const name=await askName(suggestNames(f.name,guess,finalIds),`${cans.length} صفحة`,"",guess);
     if(!name){toast("أُلغي الإرفاق");return}
     const kind=DLG_KIND;
-    const pages=cans.map((c,i)=>{const ctx=c.getContext("2d",{willReadFrequently:true});if(kind==="report")cleanBoxes(ctx,c.width,c.height);
+    const pages=cans.map((c,i)=>{const ctx=c.getContext("2d",{willReadFrequently:true});if(kind==="report")cleanBoxes(ctx,c.width,c.height,boxes[i]);
       const fr=useSaved&&Array.isArray(saved.data[i].free)?saved.data[i].free.filter(okBox):[];
       fr.forEach(fb=>cleanRect(ctx,c.width,fb.x/100*c.width,fb.y/100*c.height,fb.w/100*c.width,fb.h/100*c.height,false));
       return c.toDataURL("image/jpeg",.8)});
     if(PAGES.length)await saveDraft();
     setCur(newId());KIND=kind;docName=name;load(pages,finalIds);
     let found=0;
-    finalIds.forEach((id,i)=>{const s=useSaved?saved.data[i]:texts[i];
+    finalIds.forEach((id,i)=>{state[id].box=boxes[i]||{};const s=useSaved?saved.data[i]:texts[i];
       if(kind==="report")for(const k of ["ifada","coords"]){const v=s&&typeof s[k]==="string"?s[k].trim():"";if(v&&!state[id][k]){state[id][k]=v;found++}}
       if(useSaved&&Array.isArray(s.free)){state[id].free=s.free.filter(okBox).map(x=>({x:x.x,y:x.y,w:x.w,h:x.h,t:x.t}));found+=state[id].free.length}});
     build();store();await saveDraft();
@@ -541,7 +567,7 @@ $("#pdfIn").onchange=async()=>{const f=$("#pdfIn").files[0];$("#pdfIn").value=""
   finally{b.disabled=false;b.textContent="📎 إرفاق ملف PDF"}};
 
 function load(pages,ids){PAGES=pages;IDS=ids;state={};SEL.clear();IDS.forEach(id=>state[id]={ifada:"",coords:"",before:"",after:"",note:"",free:[]});
-  if(EMB&&EMB.initialState)IDS.forEach(id=>{for(const k of ["ifada","coords","before","after","note"]){const v=EMB.initialState[id]?.[k];if(typeof v==="string")state[id][k]=v}const fr=EMB.initialState[id]?.free;if(Array.isArray(fr))state[id].free=fr.map(x=>({...x}))});
+  if(EMB&&EMB.initialState)IDS.forEach(id=>{for(const k of ["ifada","coords","before","after","note"]){const v=EMB.initialState[id]?.[k];if(typeof v==="string")state[id][k]=v}const bx0=EMB.initialState[id]?.box;if(bx0&&typeof bx0==="object")state[id].box=bx0;const fr=EMB.initialState[id]?.free;if(Array.isArray(fr))state[id].free=fr.map(x=>({...x}))});
   restore();
   $("#empty").hidden=true;$("#ttl").textContent=`${docName} · ${IDS.length} `+(isReport()?"بلاغ":"صفحة");$("#btnPdf").hidden=!!EMB&&!canReturn();$("#btnWa").hidden=false;$("#btnMail").hidden=false;$("#btnWipeAll").hidden=false;$("#btnPdf").textContent=EMB?"📄 تحميل PDF":"📄 تجهيز PDF";$("#btnLink").hidden=!!EMB;$("#btnDelete").hidden=!!EMB;$("#btnHtml").hidden=!!EMB;$("#btnSite").hidden=!!EMB;$("#btnPages").hidden=!!EMB;$("#linkHint").hidden=true;$("#done").hidden=true;
   $("#status").textContent=(isReport()?"اكتب في المربعات وغيّر الصور، ثم اضغط «تجهيز PDF». ":"الملف يظهر كما هو — اضغط «➕ إضافة نص» على أي صفحة لتكتب عليها، ثم «تصدير PDF». ")+"("+VER+")"+(EMB?untilText():"");$("#hrsBox").hidden=!!EMB;$("#retBox").hidden=!!EMB;build();scheduleDraft();applyBtns();$("#btnSave").classList.remove("dirty")}
@@ -554,7 +580,7 @@ function build(){const list=$("#list");list.innerHTML="";
     add.onclick=()=>{const R=s.getBoundingClientRect(),hh=Math.min(40,R.width*.16/R.height*100);const f={x:30,y:Math.max(0,45-hh/2),w:40,h:+hh.toFixed(2),t:""};state[id].free.push(f);const bx=freeBox(s,id,f);s.append(bx);store();bx.querySelector("textarea").focus()};
     s.append(add);(state[id].free||[]).forEach(f=>s.append(freeBox(s,id,f)));
     if(isReport()){
-    for(const k of ["ifada","coords"]){const b=BOX[k];const ta=el("textarea",{id:`${k}_${i}`,className:k==="coords"?"c":"",placeholder:k==="ifada"?"اكتب الإفادة هنا":"اكتب الإحداثيات",value:state[id][k]});
+    for(const k of ["ifada","coords"]){const b=boxOf(i,k);const ta=el("textarea",{id:`${k}_${i}`,className:k==="coords"?"c":"",placeholder:k==="ifada"?"اكتب الإفادة هنا":"اكتب الإحداثيات",value:state[id][k]});
       ta.dir="auto";ta.setAttribute("aria-label",(k==="ifada"?"الإفادة":"إحداثيات الموقع")+" — "+id);Object.assign(ta.style,{left:b[0]+"%",top:b[1]+"%",width:b[2]+"%",height:b[3]+"%"});
       ta.oninput=()=>{state[id][k]=ta.value;store()};s.append(ta)}
     for(const k of ["before","after"]){const sl=el("div",{className:"slot "+k,hidden:true},`<img alt=""><span class="lab">${k==="before"?"قبل":"بعد"}</span>`);sl.style.left=SLOT[k]+"%";
@@ -563,7 +589,7 @@ function build(){const list=$("#list");list.innerHTML="";
       btn.onclick=()=>inp.click();inp.onchange=async()=>{const f=inp.files[0];inp.value="";if(!f)return;
         try{state[id][k]=await shrink(f);sl.querySelector("img").src=state[id][k];sl.hidden=false;scheduleDraft();toast("تم تغيير الصورة")}catch(_){toast("تعذّرت قراءة الصورة")}};
       s.append(sl,inp,btn)}
-    const wb=el("button",{type:"button",className:"wipe",textContent:"🧽 مسح الكتابة"});
+    const wb=el("button",{type:"button",className:"wipe",textContent:"🧽 مسح الكتابة"});{const b=boxOf(i,"ifada");Object.assign(wb.style,{left:(b[0]+1.5)+"%",top:(b[1]+b[3])+"%",transform:"translateY(-120%)"})}
     wb.onclick=async()=>{if(!confirm("مسح كل الكتابة في الإفادة والإحداثيات لهذا البلاغ لتكتب من جديد؟"))return;wb.disabled=true;
       try{await wipePage(i);toast("تم مسح الكتابة — اكتب من جديد")}catch(e){toast("تعذّر المسح")}finally{wb.disabled=false}};
     s.append(wb)}
@@ -615,7 +641,7 @@ $("#pkLink").onclick=()=>{if(!SEL.size){toast("اختر صفحة واحدة عل
 
 /* Wipes old writing: clears the boxes in the page image itself and empties the fields */
 async function wipePage(i){if(!isReport()){if(!EMB){state[IDS[i]].free=[];store()}return}const id=IDS[i],im=await loadImg(PAGES[i]);const c=el("canvas");c.width=im.width;c.height=im.height;
-  const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,0,0);cleanBoxes(ctx,c.width,c.height);PAGES[i]=c.toDataURL("image/jpeg",.8);
+  const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,0,0);cleanBoxes(ctx,c.width,c.height,state[id].box);PAGES[i]=c.toDataURL("image/jpeg",.8);
   if(fieldOn("ifada"))state[id].ifada="";if(fieldOn("coords"))state[id].coords="";const sh=$("#list").querySelectorAll(".sheet")[i];if(sh){sh.querySelector("img").src=PAGES[i];for(const k of ["ifada","coords"]){const t=sh.querySelector("#"+k+"_"+i);if(t)t.value=""}}
   store()}
 function loadImg(src){return new Promise((ok,no)=>{const im=new Image();im.onload=()=>ok(im);im.onerror=no;im.src=src})}
@@ -856,7 +882,7 @@ async function buildPdf(){
       ctx.font="800 26px Cairo, Tahoma, sans-serif";const t=k==="before"?"قبل":"بعد";const tw=ctx.measureText(t).width+36;
       ctx.fillStyle=k==="before"?"#c2410c":"#15803d";rr(ctx,sx+sw-tw-10,sy+10,tw,42,20);ctx.fill();ctx.fillStyle="#fff";ctx.textAlign="center";ctx.fillText(t,sx+sw-10-tw/2,sy+41)}
     ctx.direction="rtl";ctx.textAlign="right";ctx.fillStyle="#111";
-    if(isReport())for(const k of ["ifada","coords"]){const b=BOX[k],x=b[0]/100*W,y=b[1]/100*H,w=b[2]/100*W,h=b[3]/100*H,fs=Math.round((k==="ifada"?30:26)*W/910);
+    if(isReport())for(const k of ["ifada","coords"]){const b=boxOf(i,k),x=b[0]/100*W,y=b[1]/100*H,w=b[2]/100*W,h=b[3]/100*H,fs=Math.round((k==="ifada"?30:26)*W/910);
       drawBoxText(ctx,st[k]||"",x,y,w,h,fs,(k==="ifada"?"الإفادة":"الإحداثيات")+" في الصفحة "+(i+1))}
     for(const f of st.free||[]){if(!(f.t||"").trim())continue;const bh=.04*W,x=f.x/100*W,y=f.y/100*H+bh,w=f.w/100*W,h=Math.max(10,f.h/100*H-bh);
       drawBoxText(ctx,f.t,x,y,w,h,Math.round(27*W/910),"النص المضاف في الصفحة "+(i+1),true)}
